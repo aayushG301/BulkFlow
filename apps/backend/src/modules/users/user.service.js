@@ -1,141 +1,156 @@
 const User = require("./user.model");
-const { hashPassword, comparePassword } = require("../../utils/password.utils");
+const {hashPassword, comparePassword} = require("../../utils/password.utils");
 
-// Create the User
+// Create User
 const createUser = async (validatedData) => {
-    const email = validatedData.email;
-    // Validate the email
-    if(!email) {
-        error.status = 400;
-        error.message = "Email is required";
-        throw error;
-    }
-    // Check if the email already exists
-    const existingUser = await User.findOne({email});
-    if(existingUser) {
-        error.status = 400;
-        error.message = "Email already exists";
-        throw error;
-    }
-    // Validate the password
-    if(!validatedData.password) {
-        error.status = 400;
-        error.message = "Password is required";
-        throw error;    
-    }
-    const hashedPassword = await hashPassword(validatedData.password);
-    const user = new User({
-        email,
-        password: hashedPassword,
-    });
-    return user;
+  const { name, email, password, avatar } = validatedData;
+  // Check if email already exists
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    const error = new Error("Email already exists");
+    error.status = 409;
+    throw error;
+  }
+  // Hash password
+  const hashedPassword = await hashPassword(password);
+  // Create user
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    avatar,
+  });
+  // Never return password
+  user.password = undefined;
+  return user;
 };
 
-// Get the User by ID
+// Get User by ID
 const getUserById = async (userId) => {
-    const user = await User.findById(userId).select("-password");
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    return user;
+  const user = await User.findById(userId).select("-password");
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  return user;
 };
 
-// Get the User by Email
+// Get User by Email
 const getUserByEmail = async (email) => {
-    const user = await User.findOne({email}).select("-password");
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    return user;
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+  return user;
 };
 
-// Update the User Info
+// Update User Info
 const updateUser = async (userId, validatedData) => {
-    const user = await User.findById(userId).select("-password");
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    // Update the lastLogin field if it's included in validatedData
-    if (validatedData.lastLogin) {
-        user.lastLogin = validatedData.lastLogin;
-    }
-    // Update the user info
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  if (validatedData.name !== undefined) {
     user.name = validatedData.name;
-    user.email = validatedData.email;
-    user.role = validatedData.role;
-    // Save the user
-    await user.save();
-    return user;
+  }
+
+  if (validatedData.avatar !== undefined) {
+    user.avatar = validatedData.avatar;
+  }
+
+  await user.save();
+
+  return user;
 };
 
-// Change the User Password
+// Change User Password
 const changePassword = async (userId, currentPassword, newPassword) => {
-    const user = await User.findById(userId).select("-password");
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    // Validate the current password
-    if(!await comparePassword(currentPassword, user.password)) {
-        error.status = 400;
-        error.message = "Current password is incorrect";
-        throw error;
-    }
-    // Validate the new password
-    if(!newPassword) {
-        error.status = 400;
-        error.message = "New password is required";
-        throw error;
-    }
-    // Hash the new password
-    const hashedPassword = await hashPassword(newPassword);
-    user.password = hashedPassword;
-    // Save the user
-    await user.save();
-    return user;
+  // Password is required for comparison
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+  if(!user.isActive) {
+    const error = new Error("User is inactive");
+    error.status = 401;
+    throw error;
+  }
+
+  // Check current password
+  const isPasswordCorrect = await comparePassword(
+    currentPassword,
+    user.password
+  );
+
+  if (!isPasswordCorrect) {
+    const error = new Error("Current password is incorrect");
+    error.status = 401;
+    throw error;
+  }
+
+  // Hash new password
+  const hashedPassword = await hashPassword(newPassword);
+
+  user.password = hashedPassword;
+
+  await user.save();
+  return true;
 };
 
-//Delete the User
+// Delete / Deactivate User
 const deleteUser = async (userId) => {
-    const user = await User.findById(userId);
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    // Delete the user
-    await user.delete();
-    return user;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  // Soft delete
+  user.isActive = false;
+
+  await user.save();
+
+  return true;
 };
 
 // Update Last Login Time
 const updateLastLogin = async (userId) => {
-    const user = await User.findById(userId);
-    if(!user) {
-        error.status = 404;
-        error.message = "User not found";
-        throw error;
-    }
-    // Update the last login time
-    user.lastLogin = Date.now();
-    // Save the user
-    await user.save();
-    return user;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  user.lastLoginAt = new Date();
+
+  await user.save();
+
+  return user;
 };
 
 module.exports = {
-    createUser,
-    getUserById,
-    getUserByEmail,
-    updateUser,
-    changePassword,
-    deleteUser,
-    updateLastLogin,
+  createUser,
+  getUserById,
+  getUserByEmail,
+  updateUser,
+  changePassword,
+  deleteUser,
+  updateLastLogin,
 };
