@@ -1,0 +1,8 @@
+const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "15m";
+
+const PASSWORD_RESET_TOKEN_EXPIRES_IN = 15 * 60 * 1000; // 15 minutes
+
+module.exports = {
+  ACCESS_TOKEN_EXPIRES_IN,
+  PASSWORD_RESET_TOKEN_EXPIRES_IN,
+};
