@@ -1,10 +1,11 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+const env = require("../config/env");
 
 // Generate Access Token
 const generateAccessToken = (userId) => {
   return jwt.sign(
-    { userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN }
+    { userId }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN }
   );
 };
 

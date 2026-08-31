@@ -1,5 +1,4 @@
 const { z } = require("zod");
-
 const userRoles = require("../../constants/user.constants");
 
 // Register
