@@ -1,14 +1,9 @@
 const fs = require("fs/promises");
 const path = require("path");
 const Upload = require("./upload.model");
+const { createError } = require("../../constants/error.constants");
 
 // Helpers
-const createError = (status, message) => {
-  const error = new Error(message);
-  error.status = status;
-  return error;
-};
-
 const getUploadForUser = async (uploadId, userId) => {
   const upload = await Upload.findOne({
     _id: uploadId,

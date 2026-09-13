@@ -27,7 +27,11 @@ const envSchema = z.object({
     .string()
     .url()
     .default("http://localhost:3000"),
-});
+
+    REDIS_URL: z
+    .string()
+    .min(1, "REDIS_URL is required"),
+   });
 
 const parsedEnv = envSchema.safeParse(process.env);
 

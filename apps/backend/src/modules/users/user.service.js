@@ -1,5 +1,6 @@
 const User = require("./user.model");
 const {hashPassword, comparePassword} = require("../../utils/password.utils");
+const { createError } = require("../../constants/error.constants");
 
 // Create User
 const createUser = async (validatedData) => {
@@ -7,9 +8,7 @@ const createUser = async (validatedData) => {
   // Check if email already exists
   const existingUser = await User.findOne({ email });
   if (existingUser) {
-    const error = new Error("Email already exists");
-    error.status = 409;
-    throw error;
+    throw createError(409, "Email already exists");
   }
   // Hash password
   const hashedPassword = await hashPassword(password);
@@ -32,9 +31,8 @@ const getUserById = async (userId) => {
   if (!user) {
     const error = new Error("User not found");
     error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
-
   return user;
 };
 
@@ -43,9 +41,7 @@ const getUserByEmail = async (email) => {
   const user = await User.findOne({ email });
 
   if (!user) {
-    const error = new Error("User not found");
-    error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
   return user;
 };
@@ -55,9 +51,7 @@ const updateUser = async (userId, validatedData) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    const error = new Error("User not found");
-    error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
 
   if (validatedData.name !== undefined) {
@@ -79,14 +73,10 @@ const changePassword = async (userId, currentPassword, newPassword) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    const error = new Error("User not found");
-    error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
   if(!user.isActive) {
-    const error = new Error("User is inactive");
-    error.status = 401;
-    throw error;
+    throw createError(401, "User is inactive");
   }
 
   // Check current password
@@ -96,9 +86,7 @@ const changePassword = async (userId, currentPassword, newPassword) => {
   );
 
   if (!isPasswordCorrect) {
-    const error = new Error("Current password is incorrect");
-    error.status = 401;
-    throw error;
+    throw createError(401, "Current password is incorrect");
   }
 
   // Hash new password
@@ -115,16 +103,12 @@ const deleteUser = async (userId) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    const error = new Error("User not found");
-    error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
 
   // Soft delete
   user.isActive = false;
-
   await user.save();
-
   return true;
 };
 
@@ -133,15 +117,11 @@ const updateLastLogin = async (userId) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    const error = new Error("User not found");
-    error.status = 404;
-    throw error;
+    throw createError(404, "User not found");
   }
 
   user.lastLoginAt = new Date();
-
   await user.save();
-
   return user;
 };
 
