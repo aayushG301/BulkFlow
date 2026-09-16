@@ -1,34 +1,27 @@
-// ----------------------------------------
-// Process Single Result
-// ----------------------------------------
+const { processRow } = require("../modules/processing/processing.service");
 
-const processResult = async (result) => {
-  if (!result) {
-    throw new Error("Result is required");
+const { enrichRow } = require("../modules/enrichment/enrichment.service");
+
+const processResult = async (result, enrichmentEnabled = false) => {
+  if (!result?.originalData) {
+    const error = new Error("Result contains no original data");
+
+    error.code = "INVALID_RESULT";
+    throw error;
   }
 
-  if (!result.originalData) {
-    throw new Error("Result contains no original data");
-  }
+  const processed = await processRow(result);
 
-  // ----------------------------------------
-  // Processing Placeholder
-  // ----------------------------------------
-  //
-  // Future processing can happen here:
-  //
-  // - Data validation
-  // - Normalization
-  // - Duplicate detection
-  // - AI enrichment
-  // - Company enrichment
-  // - Lead scoring
-  //
-  // ----------------------------------------
-
-  return {
-    processedData: result.originalData,
+  const data = {
+    processedData: processed.processedData,
+    enrichmentData: null,
   };
+
+  if (enrichmentEnabled) {
+    data.enrichmentData = await enrichRow(data.processedData);
+  }
+
+  return data;
 };
 
 module.exports = {

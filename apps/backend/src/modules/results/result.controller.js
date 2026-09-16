@@ -1,14 +1,40 @@
 const resultService = require("./result.service");
+const resultValidation = require("./result.validation");
 
-const getResultById = async (req, res, next) => {
+// Get results for a job
+const getResultsByJob = async (req, res, next) => {
   try {
-    const result = await resultService.getResultById(
-      req.params.resultId,
-      req.user._id
+    const { jobId } = resultValidation.jobIdSchema.parse(req.params);
+
+    const query = resultValidation.resultListQuerySchema.parse(req.query);
+
+    const results = await resultService.getResultsByJob(
+      jobId,
+      query.page,
+      query.pageSize,
+      query.status,
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      message: "Results retrieved successfully",
+      data: results,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get single result
+const getResult = async (req, res, next) => {
+  try {
+    const { resultId } = resultValidation.resultIdSchema.parse(req.params);
+
+    const result = await resultService.getResultById(resultId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Result retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -16,57 +42,19 @@ const getResultById = async (req, res, next) => {
   }
 };
 
-const getJobResults = async (req, res, next) => {
+// Update result
+const updateResult = async (req, res, next) => {
   try {
-    const { page, limit, status } = req.query;
+    const { resultId } = resultValidation.resultIdSchema.parse(req.params);
 
-    const result = await resultService.getJobResults(
-      req.params.jobId,
-      req.user._id,
-      page,
-      limit,
-      status
-    );
+    const data = resultValidation.updateResultSchema.parse(req.body);
 
-    res.status(200).json({
+    const result = await resultService.updateResult(resultId, data);
+
+    return res.status(200).json({
       success: true,
+      message: "Result updated successfully",
       data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getFailedResults = async (req, res, next) => {
-  try {
-    const { page, limit } = req.query;
-
-    const result = await resultService.getFailedResults(
-      req.params.jobId,
-      req.user._id,
-      page,
-      limit
-    );
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getResultStats = async (req, res, next) => {
-  try {
-    const stats = await resultService.getResultStats(
-      req.params.jobId,
-      req.user._id
-    );
-
-    res.status(200).json({
-      success: true,
-      data: stats,
     });
   } catch (error) {
     next(error);
@@ -74,8 +62,7 @@ const getResultStats = async (req, res, next) => {
 };
 
 module.exports = {
-  getResultById,
-  getJobResults,
-  getFailedResults,
-  getResultStats,
+  getResultsByJob,
+  getResult,
+  updateResult,
 };

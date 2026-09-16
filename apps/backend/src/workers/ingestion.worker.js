@@ -12,75 +12,173 @@ const { addProcessingJob } = require("../queues/processing.queue");
 
 const { parseFile } = require("../services/file-parser.service");
 
+const { deleteFile } = require("../services/file-cleanup.service");
+
+const {
+  markJobProcessing,
+  failJob,
+} = require("../services/job-status.service");
+
+const {
+  updateUploadProgress,
+  updateUploadStatus,
+} = require("../modules/uploads/upload.service");
+
 const ingestionWorker = new Worker(
   QUEUE_NAMES.INGESTION,
+
   async (job) => {
     const { uploadId, jobId } = job.data;
 
-    console.log(`Starting ingestion: ${jobId}`);
+    console.log(`📥 Starting ingestion: ${jobId}`);
 
-    // 1. Find upload
     const upload = await Upload.findById(uploadId);
 
     if (!upload) {
       throw new Error(`Upload ${uploadId} not found`);
     }
 
-    // 2. Find job
     const processingJob = await Job.findById(jobId);
 
     if (!processingJob) {
       throw new Error(`Job ${jobId} not found`);
     }
 
-    // 3. Mark job as processing
-    processingJob.status = "processing";
-    processingJob.startedAt = new Date();
+    /*
+     * Do not process cancelled jobs.
+     */
+    if (processingJob.status === "cancelled" || upload.status === "cancelled") {
+      console.log(
+        `🛑 Ingestion skipped because job/upload is cancelled: ${jobId}`,
+      );
 
-    await processingJob.save();
-
-    // 4. Parse file
-    const rows = await parseFile(upload.filePath);
-
-    console.log(`${rows.length} rows found`);
-
-    if (rows.length === 0) {
-      throw new Error("Uploaded file contains no data rows");
+      return {
+        jobId,
+        uploadId,
+        status: "cancelled",
+      };
     }
 
-    // 5. Create result documents
-    const results = rows.map((row, index) => ({
-      jobId,
-      rowNum: index + 1,
-      originalData: row,
-      status: "pending",
-    }));
+    /*
+     * Mark job and upload as processing.
+     */
+    await markJobProcessing(jobId);
 
-    await createManyResults(results);
+    await updateUploadStatus(uploadId, "processing");
 
-    // 6. Update job statistics
-    processingJob.processStats.totalRows = rows.length;
-    processingJob.processStats.processedRows = 0;
-    processingJob.processStats.successfulRows = 0;
-    processingJob.processStats.failedRows = 0;
-    processingJob.progress = 0;
+    try {
+      /*
+       * Parse CSV/XLSX.
+       */
+      const rows = await parseFile(upload.file?.storageKey);
 
-    await processingJob.save();
+      console.log(`📊 ${rows.length} rows found`);
 
-    // 7. Add processing job
-    await addProcessingJob({
-      jobId: jobId.toString(),
-      uploadId: uploadId.toString(),
-    });
+      if (rows.length === 0) {
+        const error = new Error("Uploaded file contains no data rows");
 
-    console.log(`Processing job queued: ${jobId}`);
+        error.code = "EMPTY_FILE";
 
-    return {
-      jobId,
-      uploadId,
-      totalRows: rows.length,
-    };
+        throw error;
+      }
+
+      /*
+       * Convert parsed rows into Result documents.
+       */
+      const results = rows.map((row, index) => ({
+        jobId,
+        rowNum: index + 1,
+        originalData: row,
+        processedData: null,
+        status: "pending",
+      }));
+
+      /*
+       * Store all rows.
+       */
+      await createManyResults(results);
+
+      /*
+       * Initialize Job statistics.
+       */
+      processingJob.processStats = {
+        totalRows: rows.length,
+        processedRows: 0,
+        successfulRows: 0,
+        failedRows: 0,
+      };
+
+      processingJob.progress = 0;
+
+      await processingJob.save();
+
+      /*
+       * Initialize Upload statistics.
+       */
+      await updateUploadProgress(uploadId, {
+        totalRows: rows.length,
+        processedRows: 0,
+        successfulRows: 0,
+        failedRows: 0,
+      });
+
+      /*
+       * Queue actual row processing.
+       */
+      await addProcessingJob({
+        jobId: jobId.toString(),
+        uploadId: uploadId.toString(),
+      });
+
+      console.log(`📤 Processing job queued: ${jobId}`);
+
+      /*
+       * The original upload file is no longer
+       * needed after ingestion.
+       *
+       * IMPORTANT:
+       * We are intentionally NOT deleting it yet.
+       *
+       * Keep the file until the entire pipeline
+       * has been tested successfully.
+       */
+
+      return {
+        jobId,
+        uploadId,
+        totalRows: rows.length,
+      };
+    } catch (error) {
+      console.error(`❌ Ingestion failed for ${jobId}:`, error.message);
+
+      /*
+       * Mark Job as failed.
+       */
+      try {
+        await failJob(jobId, error, "INGESTION_ERROR");
+      } catch (statusError) {
+        console.error(
+          `❌ Failed to update job failure status:`,
+          statusError.message,
+        );
+      }
+
+      /*
+       * Mark Upload as failed.
+       */
+      try {
+        await updateUploadStatus(uploadId, "failed");
+      } catch (uploadError) {
+        console.error(
+          `❌ Failed to update upload status:`,
+          uploadError.message,
+        );
+      }
+
+      throw error;
+    }
   },
+
   {
     connection: createRedisConnection(),
   },
@@ -91,7 +189,7 @@ ingestionWorker.on("completed", (job) => {
 });
 
 ingestionWorker.on("failed", (job, error) => {
-  console.error(`❌ Ingestion failed: ${job?.id}`, error.message);
+  console.error(`❌ Ingestion worker failed: ${job?.id}`, error.message);
 });
 
 ingestionWorker.on("error", (error) => {

@@ -2,6 +2,11 @@ const fs = require("fs/promises");
 const path = require("path");
 const Upload = require("./upload.model");
 const { createError } = require("../../constants/error.constants");
+const {
+  getPagination,
+  buildPaginationMeta,
+} = require("../../utils/pagination");
+const Job = require("../jobs/job.model");
 
 // Helpers
 const getUploadForUser = async (uploadId, userId) => {
@@ -56,31 +61,27 @@ const getUploadById = async (uploadId, userId) => {
 };
 
 // Get User Uploads
-const getUserUploads = async (userId, page = 1, limit = 10, status) => {
+const getUserUploads = async (userId, page, limit, status) => {
   if (!userId) {
     throw createError(401, "User authentication is required");
   }
-  page = Math.max(Number(page) || 1, 1);
-  limit = Math.min(Math.max(Number(limit) || 10, 1), 100);
-  const skip = (page - 1) * limit;
-  const filter = {
-    userId,
-  };
-  if (status) {
-    filter.status = status;
-  }
+
+  const pagination = getPagination(page, limit);
+  const filter = { userId };
+
+  if (status) filter.status = status;
+
   const [uploads, total] = await Promise.all([
-    Upload.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Upload.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit),
     Upload.countDocuments(filter),
   ]);
+
   return {
     uploads,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    pagination: buildPaginationMeta(pagination.page, pagination.limit, total),
   };
 };
 
@@ -189,6 +190,14 @@ const cancelUpload = async (uploadId, userId) => {
   upload.processingCompletedAt = new Date();
 
   await upload.save();
+
+  await Job.updateMany(
+    { uploadId: upload._id, userId, status: { $in: ["queued", "processing"] } },
+    {
+      status: "cancelled",
+      completedAt: new Date(),
+    },
+  );
 
   return upload;
 };

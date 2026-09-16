@@ -1,6 +1,13 @@
 const Job = require("./job.model");
-const {createError} = require("../../constants/error.constants");
-const {getUploadForUser} = require("../uploads/upload.service");
+const { createError } = require("../../constants/error.constants");
+const { getUploadForUser } = require("../uploads/upload.service");
+const {
+  getPagination,
+  buildPaginationMeta,
+} = require("../../utils/pagination");
+const { addProcessingJob } = require("../../queues/processing.queue");
+const Result = require("../results/result.model");
+const { addProcessingJob } = require("../../queues/processing.queue");
 
 // Create Job
 const createJob = async (userId, jobData) => {
@@ -14,7 +21,7 @@ const createJob = async (userId, jobData) => {
     throw createError(404, "Upload not found");
   }
 
-  const existingJob = await Job.findOne({uploadId});
+  const existingJob = await Job.findOne({ uploadId });
   if (existingJob) {
     throw createError(409, "A job already exists for this upload");
   }
@@ -31,7 +38,7 @@ const createJob = async (userId, jobData) => {
 
 // Get Job By ID
 const getJobById = async (jobId, userId) => {
-  const job = await Job.findOne({_id: jobId, userId});
+  const job = await Job.findOne({ _id: jobId, userId });
   if (!job) {
     throw createError(404, "Job not found");
   }
@@ -40,29 +47,22 @@ const getJobById = async (jobId, userId) => {
 
 // Get User Jobs
 const getUserJobs = async (userId, page, limit, status) => {
-  page = Math.max(Number(page), 1);
-  limit = Math.min(Math.max(Number(limit), 10), 100);
+  const pagination = getPagination(page, limit);
+  const filter = { userId };
 
-  const filter = {userId};
-  if (status) {
-    filter.status = status;
-  }
-  const skip = (page - 1) * limit;
+  if (status) filter.status = status;
+
   const [jobs, total] = await Promise.all([
-    Job.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Job.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit),
     Job.countDocuments(filter),
   ]);
 
   return {
     jobs,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      hasNextPage: page * limit < total,
-      hasPreviousPage: page > 1,
-    },
+    pagination: buildPaginationMeta(pagination.page, pagination.limit, total),
   };
 };
 
@@ -76,7 +76,15 @@ const updateJob = async (jobId, userId, jobData) => {
   if (!job) {
     throw createError(404, "Job not found");
   }
-  if (["processing", "completed", "completed_with_errors", "failed", "cancelled"].includes(job.status)) {
+  if (
+    [
+      "processing",
+      "completed",
+      "completed_with_errors",
+      "failed",
+      "cancelled",
+    ].includes(job.status)
+  ) {
     throw createError(400, `Job cannot be updated in its current state`);
   }
   if (jobData.name !== undefined) {
@@ -103,8 +111,15 @@ const cancelJob = async (jobId, userId) => {
     throw createError(404, "Job not found");
   }
 
-  if (["completed", "completed_with_errors", "failed", "cancelled"].includes(job.status)) {
-    throw createError(400, `Job cannot be cancelled because it is already ${job.status}`);
+  if (
+    ["completed", "completed_with_errors", "failed", "cancelled"].includes(
+      job.status,
+    )
+  ) {
+    throw createError(
+      400,
+      `Job cannot be cancelled because it is already ${job.status}`,
+    );
   }
   job.status = "cancelled";
   await job.save();
@@ -134,34 +149,51 @@ const deleteJob = async (jobId, userId) => {
 
 // Retry Job
 const retryJob = async (jobId, userId) => {
-  const job = await Job.findOne({
-    _id: jobId,
-    userId,
-  });
-  if (!job) {
-    throw createError(404, "Job not found");
-  }
+  const job = await Job.findOne({ _id: jobId, userId });
+
+  if (!job) throw createError(404, "Job not found");
+
   if (!["failed", "completed_with_errors"].includes(job.status)) {
-    throw createError(400, `Only failed or completed-with-errors jobs can be retried, but the job is ${job.status}`);
+    throw createError(400, "Job cannot be retried in its current state");
   }
 
+  await Result.updateMany(
+    { jobId, status: "failed" },
+    {
+      $set: {
+        status: "pending",
+        processedData: null,
+        enrichmentData: null,
+        processedAt: null,
+        error: { message: null, code: null },
+      },
+    },
+  );
+
+  const failedCount = await Result.countDocuments({
+    jobId,
+    status: "pending",
+  });
+
   job.status = "queued";
+  job.progress = 0;
   job.processStats = {
-    totalRows: job.processStats?.totalRows || 0,
+    totalRows: failedCount,
     processedRows: 0,
     successfulRows: 0,
     failedRows: 0,
   };
-  job.progress = 0;
-  job.error = {
-    message: null,
-    code: null,
-  };
-
+  job.error = { message: null, code: null };
   job.startedAt = null;
   job.completedAt = null;
 
   await job.save();
+
+  await addProcessingJob({
+    jobId: job._id.toString(),
+    uploadId: job.uploadId.toString(),
+  });
+
   return job;
 };
 
@@ -194,10 +226,16 @@ const updateJobProgress = async (jobId, stats = {}) => {
   }
 
   const totalRows = Number(stats.totalRows ?? job.processStats.totalRows) || 0;
-  const processedRows = Number(stats.processedRows ?? job.processStats.processedRows) || 0;
-  const successfulRows = Number(stats.successfulRows ?? job.processStats.successfulRows) || 0;
-  const failedRows = Number(stats.failedRows ?? job.processStats.failedRows) || 0;
-  const progress = totalRows > 0 ? Math.min(Math.round((processedRows / totalRows) * 100), 100) : 0;
+  const processedRows =
+    Number(stats.processedRows ?? job.processStats.processedRows) || 0;
+  const successfulRows =
+    Number(stats.successfulRows ?? job.processStats.successfulRows) || 0;
+  const failedRows =
+    Number(stats.failedRows ?? job.processStats.failedRows) || 0;
+  const progress =
+    totalRows > 0
+      ? Math.min(Math.round((processedRows / totalRows) * 100), 100)
+      : 0;
 
   job.processStats = {
     totalRows,
@@ -221,8 +259,10 @@ const completeJob = async (jobId, stats = {}) => {
   }
   const totalRows = Number(stats.totalRows ?? job.processStats.totalRows) || 0;
   const processedRows = Number(stats.processedRows ?? totalRows) || 0;
-  const successfulRows = Number(stats.successfulRows ?? job.processStats.successfulRows) || 0;
-  const failedRows = Number(stats.failedRows ?? job.processStats.failedRows) || 0;
+  const successfulRows =
+    Number(stats.successfulRows ?? job.processStats.successfulRows) || 0;
+  const failedRows =
+    Number(stats.failedRows ?? job.processStats.failedRows) || 0;
 
   job.processStats = {
     totalRows,
@@ -244,8 +284,13 @@ const failJob = async (jobId, error) => {
   if (!job) {
     throw createError(404, "Job not found");
   }
-  if (["completed", "completed_with_errors", "cancelled"].includes(job.status)) {
-    throw createError(400, `Job cannot be marked as failed in its current state ${job.status}`);
+  if (
+    ["completed", "completed_with_errors", "cancelled"].includes(job.status)
+  ) {
+    throw createError(
+      400,
+      `Job cannot be marked as failed in its current state ${job.status}`,
+    );
   }
   job.status = "failed";
   job.error = {

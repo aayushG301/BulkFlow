@@ -17,27 +17,32 @@ const createJob = async (req, res, next) => {
 };
 
 const getJob = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const jobId = jobValidation.jobIdSchema.parse(req.params).jobId;
-        const job = await jobService.getJobById(jobId, userId);
-        return res.status(200).json({
-            success: true,
-            message: "Job retrieved successfully",
-            data: job,
-        });
-    } catch (error) {
-        next(error);
-    }
+  try {
+    const userId = req.user.id;
+    const jobId = jobValidation.jobIdSchema.parse(req.params).jobId;
+    const job = await jobService.getJobById(jobId, userId);
+    return res.status(200).json({
+      success: true,
+      message: "Job retrieved successfully",
+      data: job,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const getJobs = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const page = jobValidation.jobListQuerySchema.parse(req.query).page;
-    const limit = jobValidation.jobListQuerySchema.parse(req.query).pageSize;
-    const status = jobValidation.jobListQuerySchema.parse(req.query).status;
-    const jobs = await jobService.getUserJobs(userId, page, limit, status);
+    const query = jobValidation.jobListQuerySchema.parse(req.query);
+
+    const jobs = await jobService.getUserJobs(
+      userId,
+      query.page,
+      query.pageSize,
+      query.status,
+    );
+
     return res.status(200).json({
       success: true,
       message: "Jobs retrieved successfully",

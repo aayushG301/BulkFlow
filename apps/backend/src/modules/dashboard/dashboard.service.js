@@ -2,13 +2,9 @@ const Job = require("../jobs/job.model");
 const Upload = require("../uploads/upload.model");
 
 const getDashboard = async (userId) => {
-  if (!userId) {
-    const error = new Error("User ID is required");
+  if (!userId) throw new Error("User ID is required");
 
-    error.status = 400;
-
-    throw error;
-  }
+  const filter = { userId };
 
   const [
     totalJobs,
@@ -16,41 +12,45 @@ const getDashboard = async (userId) => {
     completedJobs,
     failedJobs,
     totalUploads,
+    stats,
     recentJobs,
   ] = await Promise.all([
+    Job.countDocuments(filter),
+
     Job.countDocuments({
-      userId,
+      ...filter,
+      status: { $in: ["queued", "processing"] },
     }),
 
     Job.countDocuments({
-      userId,
-      status: {
-        $in: ["queued", "processing"],
-      },
-    }),
-
-    Job.countDocuments({
-      userId,
+      ...filter,
       status: {
         $in: ["completed", "completed_with_errors"],
       },
     }),
 
     Job.countDocuments({
-      userId,
+      ...filter,
       status: "failed",
     }),
 
-    Upload.countDocuments({
-      userId,
-    }),
+    Upload.countDocuments(filter),
 
-    Job.find({
-      userId,
-    })
-      .sort({
-        createdAt: -1,
-      })
+    Job.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalRows: { $sum: "$processStats.totalRows" },
+          processedRows: { $sum: "$processStats.processedRows" },
+          successfulRows: { $sum: "$processStats.successfulRows" },
+          failedRows: { $sum: "$processStats.failedRows" },
+        },
+      },
+    ]),
+
+    Job.find(filter)
+      .sort({ createdAt: -1 })
       .limit(5)
       .select(
         "_id name status progress processStats createdAt startedAt completedAt",
@@ -58,20 +58,12 @@ const getDashboard = async (userId) => {
       .lean(),
   ]);
 
-  let totalRows = 0;
-  let processedRows = 0;
-  let successfulRows = 0;
-  let failedRows = 0;
-
-  for (const job of recentJobs) {
-    totalRows += job.processStats?.totalRows || 0;
-
-    processedRows += job.processStats?.processedRows || 0;
-
-    successfulRows += job.processStats?.successfulRows || 0;
-
-    failedRows += job.processStats?.failedRows || 0;
-  }
+  const rows = stats[0] || {
+    totalRows: 0,
+    processedRows: 0,
+    successfulRows: 0,
+    failedRows: 0,
+  };
 
   return {
     summary: {
@@ -81,19 +73,12 @@ const getDashboard = async (userId) => {
       failedJobs,
       totalUploads,
     },
-
     processing: {
-      totalRows,
-      processedRows,
-      remainingRows: Math.max(0, totalRows - processedRows),
-      successfulRows,
-      failedRows,
+      ...rows,
+      remainingRows: Math.max(0, rows.totalRows - rows.processedRows),
     },
-
     recentJobs,
   };
 };
 
-module.exports = {
-  getDashboard,
-};
+module.exports = { getDashboard };
