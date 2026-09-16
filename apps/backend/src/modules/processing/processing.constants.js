@@ -1,0 +1,17 @@
+const PROCESSING_STATUS = {
+  PENDING: "pending",
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+};
+
+const PROCESSING_ERROR_CODES = {
+  INVALID_RESULT: "INVALID_RESULT",
+  PROCESSING_ERROR: "PROCESSING_ERROR",
+  EMPTY_DATA: "EMPTY_DATA",
+};
+
+module.exports = {
+  PROCESSING_STATUS,
+  PROCESSING_ERROR_CODES,
+};

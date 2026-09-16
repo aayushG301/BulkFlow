@@ -17,32 +17,32 @@ router.use(authenticate);
 
 // Get all results for a job
 router.get(
-  "/jobs/:jobId/results",
+  "/jobs/:jobId",
   validate(resultJobParamsSchema, "params"),
   validate(resultListQuerySchema, "query"),
-  resultController.getJobResults
+  resultController.getJobResults,
 );
 
 // Get failed results for a job
 router.get(
-  "/jobs/:jobId/results/failed",
+  "/jobs/:jobId/failed",
   validate(resultJobParamsSchema, "params"),
   validate(resultListQuerySchema, "query"),
-  resultController.getFailedResults
+  resultController.getFailedResults,
 );
 
 // Get result statistics for a job
 router.get(
-  "/jobs/:jobId/results/stats",
+  "/jobs/:jobId/stats",
   validate(resultJobParamsSchema, "params"),
-  resultController.getResultStats
+  resultController.getResultStats,
 );
 
 // Get a single result
 router.get(
-  "/results/:resultId",
+  "/:resultId",
   validate(resultIdSchema, "params"),
-  resultController.getResultById
+  resultController.getResultById,
 );
 
 module.exports = router;

@@ -70,10 +70,7 @@ const getUserUploads = async (userId, page = 1, limit = 10, status) => {
     filter.status = status;
   }
   const [uploads, total] = await Promise.all([
-    Upload.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit),
+    Upload.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
     Upload.countDocuments(filter),
   ]);
   return {
@@ -88,11 +85,7 @@ const getUserUploads = async (userId, page = 1, limit = 10, status) => {
 };
 
 // Update Upload Status
-const updateUploadStatus = async (
-  uploadId,
-  status,
-  userId = null
-) => {
+const updateUploadStatus = async (uploadId, status, userId = null) => {
   const validStatuses = [
     "queued",
     "processing",
@@ -127,10 +120,7 @@ const updateUploadStatus = async (
     ["completed", "cancelled"].includes(currentStatus) &&
     currentStatus !== status
   ) {
-    throw createError(
-      400,
-      `Cannot change status from ${currentStatus}`
-    );
+    throw createError(400, `Cannot change status from ${currentStatus}`);
   }
 
   upload.status = status;
@@ -141,7 +131,7 @@ const updateUploadStatus = async (
 
   if (
     ["completed", "completed_with_errors", "failed", "cancelled"].includes(
-      status
+      status,
     )
   ) {
     upload.processingCompletedAt = new Date();
@@ -153,22 +143,14 @@ const updateUploadStatus = async (
 };
 
 // Update Upload Progress
-const updateUploadProgress = async (
-  uploadId,
-  progressData
-) => {
+const updateUploadProgress = async (uploadId, progressData) => {
   const upload = await Upload.findById(uploadId);
 
   if (!upload) {
     throw createError(404, "Upload not found");
   }
 
-  const {
-    totalRows,
-    processedRows,
-    successfulRows,
-    failedRows,
-  } = progressData;
+  const { totalRows, processedRows, successfulRows, failedRows } = progressData;
 
   if (totalRows !== undefined) {
     upload.totalRows = Math.max(Number(totalRows), 0);
@@ -179,10 +161,7 @@ const updateUploadProgress = async (
   }
 
   if (successfulRows !== undefined) {
-    upload.successfulRows = Math.max(
-      Number(successfulRows),
-      0
-    );
+    upload.successfulRows = Math.max(Number(successfulRows), 0);
   }
 
   if (failedRows !== undefined) {
@@ -199,10 +178,7 @@ const cancelUpload = async (uploadId, userId) => {
   const upload = await getUploadForUser(uploadId, userId);
 
   if (["completed", "completed_with_errors"].includes(upload.status)) {
-    throw createError(
-      400,
-      "Completed uploads cannot be cancelled"
-    );
+    throw createError(400, "Completed uploads cannot be cancelled");
   }
 
   if (upload.status === "cancelled") {
@@ -224,18 +200,13 @@ const deleteUpload = async (uploadId, userId) => {
   // Remove stored file if it exists
   if (upload.file?.storageKey) {
     try {
-      await fs.unlink(
-        path.resolve(upload.file.storageKey)
-      );
+      await fs.unlink(path.resolve(upload.file.storageKey));
     } catch (error) {
       // Ignore missing file.
       // Other filesystem errors should not silently
       // break database deletion.
       if (error.code !== "ENOENT") {
-        throw createError(
-          500,
-          "Failed to delete uploaded file"
-        );
+        throw createError(500, "Failed to delete uploaded file");
       }
     }
   }
@@ -252,14 +223,10 @@ const deleteUpload = async (uploadId, userId) => {
 const retryUpload = async (uploadId, userId) => {
   const upload = await getUploadForUser(uploadId, userId);
 
-  if (
-    !["failed", "completed_with_errors"].includes(
-      upload.status
-    )
-  ) {
+  if (!["failed", "completed_with_errors"].includes(upload.status)) {
     throw createError(
       400,
-      "Only failed or completed-with-errors uploads can be retried"
+      "Only failed or completed-with-errors uploads can be retried",
     );
   }
 
@@ -277,9 +244,10 @@ const retryUpload = async (uploadId, userId) => {
 
   return upload;
 };
-  
+
 module.exports = {
   createUpload,
+  getUploadForUser,
   getUploadById,
   getUserUploads,
   updateUploadStatus,

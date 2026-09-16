@@ -1,119 +1,173 @@
-const { Worker } = require("bullmq");
 const fs = require("fs");
 const path = require("path");
-const { Parser } = require("json2csv");
-const XLSX = require("xlsx");
+const { Worker } = require("bullmq");
 
 const createRedisConnection = require("../queues/queue.connection");
 const { QUEUE_NAMES } = require("../queues/queue.constants");
 
-const Job = require("../modules/jobs/job.model");
+const Export = require("../modules/exports/export.model");
 const Result = require("../modules/results/result.model");
 
-const EXPORT_DIR = path.join(process.cwd(), "storage", "exports");
+const exportDirectory = path.join(process.cwd(), "exports");
 
-const ensureExportDirectory = () => {
-  if (!fs.existsSync(EXPORT_DIR)) {
-    fs.mkdirSync(EXPORT_DIR, {
-      recursive: true,
+// ----------------------------------------
+// Export Directory
+// ----------------------------------------
+
+if (!fs.existsSync(exportDirectory)) {
+  fs.mkdirSync(exportDirectory, {
+    recursive: true,
+  });
+}
+
+// ----------------------------------------
+// CSV Helpers
+// ----------------------------------------
+
+const escapeCSVValue = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  let stringValue;
+
+  if (typeof value === "object") {
+    stringValue = JSON.stringify(value);
+  } else {
+    stringValue = String(value);
+  }
+
+  if (
+    stringValue.includes('"') ||
+    stringValue.includes(",") ||
+    stringValue.includes("\n") ||
+    stringValue.includes("\r")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+
+  return stringValue;
+};
+
+const collectHeaders = (results) => {
+  const headers = new Set();
+
+  for (const result of results) {
+    const originalData = result.originalData || {};
+    const processedData = result.processedData || {};
+
+    Object.keys(originalData).forEach((key) => {
+      headers.add(key);
+    });
+
+    Object.keys(processedData).forEach((key) => {
+      headers.add(key);
     });
   }
+
+  return Array.from(headers);
 };
 
-const generateCSV = (results, filePath) => {
-  const rows = results.map((result) => ({
-    rowNum: result.rowNum,
-    ...result.originalData,
-    ...(result.processedData && typeof result.processedData === "object"
-      ? result.processedData
-      : {}),
-    status: result.status,
-    error: result.error?.message || null,
-  }));
-
-  const parser = new Parser();
-  const csv = parser.parse(rows);
-
-  fs.writeFileSync(filePath, csv);
-};
-
-const generateXLSX = (results, filePath) => {
-  const rows = results.map((result) => ({
-    rowNum: result.rowNum,
-    ...result.originalData,
-    ...(result.processedData && typeof result.processedData === "object"
-      ? result.processedData
-      : {}),
-    status: result.status,
-    error: result.error?.message || null,
-  }));
-
-  const workbook = XLSX.utils.book_new();
-
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Results");
-
-  XLSX.writeFile(workbook, filePath);
-};
+// ----------------------------------------
+// Worker
+// ----------------------------------------
 
 const exportWorker = new Worker(
   QUEUE_NAMES.EXPORT,
   async (job) => {
-    const { jobId, userId, format = "csv" } = job.data;
+    const { exportId, jobId } = job.data;
 
-    console.log(`📤 Starting export: ${jobId}`);
+    console.log(`📤 Starting export: ${exportId}`);
 
-    // Verify job ownership
-    const processingJob = await Job.findOne({
-      _id: jobId,
-      userId,
-    });
+    const exportRecord = await Export.findById(exportId);
 
-    if (!processingJob) {
-      throw new Error("Job not found");
+    if (!exportRecord) {
+      throw new Error(`Export ${exportId} not found`);
     }
 
-    // Get results
-    const results = await Result.find({
-      jobId,
-    })
-      .sort({ rowNum: 1 })
-      .lean();
+    exportRecord.status = "processing";
+    await exportRecord.save();
 
-    if (results.length === 0) {
-      throw new Error("No results available for export");
+    try {
+      const results = await Result.find({
+        jobId,
+        status: {
+          $in: ["completed", "failed"],
+        },
+      })
+        .sort({ rowNum: 1 })
+        .lean();
+
+      if (results.length === 0) {
+        throw new Error("No results found for this job");
+      }
+
+      const headers = collectHeaders(results);
+
+      const csvRows = [];
+
+      csvRows.push(["rowNum", "status", ...headers]);
+
+      for (const result of results) {
+        const row = [result.rowNum, result.status];
+
+        for (const header of headers) {
+          const value =
+            result.processedData?.[header] ??
+            result.originalData?.[header] ??
+            "";
+
+          row.push(value);
+        }
+
+        csvRows.push(row);
+      }
+
+      const csvContent = csvRows
+        .map((row) => row.map(escapeCSVValue).join(","))
+        .join("\n");
+
+      const fileName = `bulkflow-export-${jobId}-${Date.now()}.csv`;
+
+      const filePath = path.join(exportDirectory, fileName);
+
+      await fs.promises.writeFile(filePath, csvContent, "utf8");
+
+      exportRecord.status = "completed";
+      exportRecord.fileName = fileName;
+      exportRecord.filePath = filePath;
+      exportRecord.completedAt = new Date();
+
+      await exportRecord.save();
+
+      console.log(`✅ Export completed: ${exportId}`);
+
+      return {
+        exportId,
+        jobId,
+        fileName,
+      };
+    } catch (error) {
+      exportRecord.status = "failed";
+
+      exportRecord.error = {
+        message: error.message,
+        code: error.code || "EXPORT_ERROR",
+      };
+
+      await exportRecord.save();
+
+      throw error;
     }
-
-    ensureExportDirectory();
-
-    const extension = format === "xlsx" ? "xlsx" : "csv";
-
-    const fileName = `bulkflow-${jobId}-${Date.now()}.${extension}`;
-
-    const filePath = path.join(EXPORT_DIR, fileName);
-
-    // Generate file
-    if (format === "xlsx") {
-      generateXLSX(results, filePath);
-    } else {
-      generateCSV(results, filePath);
-    }
-
-    console.log(`✅ Export completed: ${fileName}`);
-
-    return {
-      jobId,
-      userId,
-      format,
-      fileName,
-      filePath,
-    };
   },
   {
     connection: createRedisConnection(),
   },
 );
+
+// ----------------------------------------
+// Worker Events
+// ----------------------------------------
 
 exportWorker.on("completed", (job) => {
   console.log(`✅ Export worker completed: ${job.id}`);
