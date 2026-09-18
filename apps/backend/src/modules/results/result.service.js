@@ -1,5 +1,7 @@
 const Result = require("./result.model");
+
 const { createError } = require("../../constants/error.constants");
+
 const {
   getPagination,
   buildPaginationMeta,
@@ -7,13 +9,15 @@ const {
 
 // Create many results
 const createManyResults = async (results) => {
-  if (!Array.isArray(results) || !results.length) return [];
+  if (!Array.isArray(results) || !results.length) {
+    return [];
+  }
 
   return Result.insertMany(results);
 };
 
 // Get results for a job
-const getResultsByJob = async (jobId, page, limit, status) => {
+const getResultsByJob = async (jobId, page, pageSize, status) => {
   if (!jobId) {
     throw createError(400, "Job ID is required");
   }
@@ -22,14 +26,17 @@ const getResultsByJob = async (jobId, page, limit, status) => {
     page: currentPage,
     limit: currentLimit,
     skip,
-  } = getPagination(page, limit);
+  } = getPagination(page, pageSize);
 
   const filter = { jobId };
 
-  if (status) filter.status = status;
+  if (status) {
+    filter.status = status;
+  }
 
   const [results, total] = await Promise.all([
     Result.find(filter).sort({ rowNum: 1 }).skip(skip).limit(currentLimit),
+
     Result.countDocuments(filter),
   ]);
 
@@ -39,15 +46,64 @@ const getResultsByJob = async (jobId, page, limit, status) => {
   };
 };
 
+// Get failed results for a job
+const getFailedResults = async (jobId, page, pageSize) => {
+  if (!jobId) {
+    throw createError(400, "Job ID is required");
+  }
+
+  return getResultsByJob(jobId, page, pageSize, "failed");
+};
+
+// Get result statistics for a job
+const getResultStats = async (jobId) => {
+  if (!jobId) {
+    throw createError(400, "Job ID is required");
+  }
+
+  const stats = await Result.aggregate([
+    {
+      $match: {
+        jobId,
+      },
+    },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const result = {
+    total: 0,
+    pending: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0,
+  };
+
+  stats.forEach((item) => {
+    result[item._id] = item.count;
+    result.total += item.count;
+  });
+
+  return result;
+};
+
 // Get single result
 const getResultById = async (resultId, jobId) => {
   if (!resultId) {
     throw createError(400, "Result ID is required");
   }
 
-  const filter = { _id: resultId };
+  const filter = {
+    _id: resultId,
+  };
 
-  if (jobId) filter.jobId = jobId;
+  if (jobId) {
+    filter.jobId = jobId;
+  }
 
   const result = await Result.findOne(filter);
 
@@ -60,20 +116,31 @@ const getResultById = async (resultId, jobId) => {
 
 // Update result
 const updateResult = async (resultId, data) => {
+  if (!resultId) {
+    throw createError(400, "Result ID is required");
+  }
+
   const result = await Result.findById(resultId);
 
   if (!result) {
     throw createError(404, "Result not found");
   }
 
-  if (data.status !== undefined) result.status = data.status;
+  if (data.status !== undefined) {
+    result.status = data.status;
+  }
+
   if (data.processedData !== undefined) {
     result.processedData = data.processedData;
   }
+
   if (data.enrichmentData !== undefined) {
     result.enrichmentData = data.enrichmentData;
   }
-  if (data.error !== undefined) result.error = data.error;
+
+  if (data.error !== undefined) {
+    result.error = data.error;
+  }
 
   if (data.status === "completed") {
     result.processedAt = new Date();
@@ -87,6 +154,8 @@ const updateResult = async (resultId, data) => {
 module.exports = {
   createManyResults,
   getResultsByJob,
+  getFailedResults,
+  getResultStats,
   getResultById,
   updateResult,
 };

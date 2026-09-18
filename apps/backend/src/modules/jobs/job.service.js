@@ -5,9 +5,14 @@ const {
   getPagination,
   buildPaginationMeta,
 } = require("../../utils/pagination");
-const { addProcessingJob } = require("../../queues/processing.queue");
 const Result = require("../results/result.model");
 const { addProcessingJob } = require("../../queues/processing.queue");
+const {
+  emitJobProgress,
+  emitJobStatus,
+  emitJobCompleted,
+  emitJobFailed,
+} = require("../../services/job-events.service");
 
 // Create Job
 const createJob = async (userId, jobData) => {
@@ -123,6 +128,11 @@ const cancelJob = async (jobId, userId) => {
   }
   job.status = "cancelled";
   await job.save();
+
+  emitJobStatus(jobId, "cancelled", {
+    completedAt: job.completedAt,
+  });
+
   return job;
 };
 
@@ -212,6 +222,9 @@ const markJobProcessing = async (jobId) => {
   job.startedAt = new Date();
 
   await job.save();
+  emitJobStatus(jobId, "processing", {
+    startedAt: job.startedAt,
+  });
   return job;
 };
 
@@ -245,6 +258,12 @@ const updateJobProgress = async (jobId, stats = {}) => {
   };
   job.progress = progress;
   await job.save();
+
+  emitJobProgress(jobId, {
+    progress: job.progress,
+    processStats: job.processStats,
+  });
+
   return job;
 };
 
@@ -275,6 +294,14 @@ const completeJob = async (jobId, stats = {}) => {
   job.completedAt = new Date();
 
   await job.save();
+
+  emitJobCompleted(jobId, {
+    status: job.status,
+    progress: 100,
+    processStats: job.processStats,
+    completedAt: job.completedAt,
+  });
+
   return job;
 };
 
@@ -300,6 +327,9 @@ const failJob = async (jobId, error) => {
   job.completedAt = new Date();
 
   await job.save();
+
+  emitJobFailed(jobId, error);
+
   return job;
 };
 

@@ -3,27 +3,25 @@ dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 require("dotenv").config();
 
+const http = require("http");
 const env = require("./config/env");
 const app = require("./app/app");
 const connectDB = require("./config/db");
-const logger = require("./utils/logger.utils");
+const { initializeSocket } = require("./socket");
 
 const startServer = async () => {
   try {
-    // Connect to database
     await connectDB();
 
-    // Start server
-    app.listen(env.PORT, () => {
-      logger.info(`BulkFlow server is running on port ${env.PORT}`);
+    const server = http.createServer(app);
+
+    initializeSocket(server);
+
+    server.listen(env.PORT, () => {
+      console.log(`🚀 BulkFlow API running on port ${env.PORT}`);
     });
   } catch (error) {
-    logger.error("Failed to start server", {
-      error: error.message,
-      stack:
-        process.env.NODE_ENV !== "production" ? error.stack : undefined,
-    });
-
+    console.error("❌ Server startup failed:", error);
     process.exit(1);
   }
 };

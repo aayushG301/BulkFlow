@@ -56,11 +56,15 @@ const resultSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 resultSchema.index({ jobId: 1, rowNum: 1 }, { unique: true });
-resultSchema.index({ jobId: 1, status: 1 });
+
+resultSchema.index({
+  jobId: 1,
+  status: 1,
+});
 
 const Result = mongoose.model("Result", resultSchema);
 

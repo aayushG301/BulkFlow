@@ -1,10 +1,10 @@
 const resultService = require("./result.service");
 const resultValidation = require("./result.validation");
 
-// Get results for a job
-const getResultsByJob = async (req, res, next) => {
+// Get all results for a job
+const getJobResults = async (req, res, next) => {
   try {
-    const { jobId } = resultValidation.jobIdSchema.parse(req.params);
+    const { jobId } = resultValidation.resultJobParamsSchema.parse(req.params);
 
     const query = resultValidation.resultListQuerySchema.parse(req.query);
 
@@ -25,8 +25,48 @@ const getResultsByJob = async (req, res, next) => {
   }
 };
 
-// Get single result
-const getResult = async (req, res, next) => {
+// Get failed results for a job
+const getFailedResults = async (req, res, next) => {
+  try {
+    const { jobId } = resultValidation.resultJobParamsSchema.parse(req.params);
+
+    const query = resultValidation.resultListQuerySchema.parse(req.query);
+
+    const results = await resultService.getFailedResults(
+      jobId,
+      query.page,
+      query.pageSize,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Failed results retrieved successfully",
+      data: results,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get result statistics for a job
+const getResultStats = async (req, res, next) => {
+  try {
+    const { jobId } = resultValidation.resultJobParamsSchema.parse(req.params);
+
+    const stats = await resultService.getResultStats(jobId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Result statistics retrieved successfully",
+      data: stats,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get a single result
+const getResultById = async (req, res, next) => {
   try {
     const { resultId } = resultValidation.resultIdSchema.parse(req.params);
 
@@ -62,7 +102,9 @@ const updateResult = async (req, res, next) => {
 };
 
 module.exports = {
-  getResultsByJob,
-  getResult,
+  getJobResults,
+  getFailedResults,
+  getResultStats,
+  getResultById,
   updateResult,
 };
