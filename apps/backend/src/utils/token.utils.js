@@ -9,6 +9,18 @@ const generateAccessToken = (userId) => {
   );
 };
 
+// Generate Refresh Token
+const generateRefreshToken = (userId) => {
+  return jwt.sign(
+    { userId }, env.REFRESH_TOKEN_SECRET, { expiresIn: env.REFRESH_TOKEN_EXPIRES_IN }
+  );
+};
+
+// Verify Refresh Token
+const verifyRefreshToken = (token) => {
+  return jwt.verify(token, env.REFRESH_TOKEN_SECRET);
+};
+
 // Generate Password Reset Token
 const generatePasswordResetToken = () => {
   return crypto.randomBytes(32).toString("hex");
@@ -21,6 +33,8 @@ const hashToken = (token) => {
 
 module.exports = {
   generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
   generatePasswordResetToken,
   hashToken,
 };

@@ -5,12 +5,13 @@ const {
     validateResetPassword,
     validateVerifyEmail,
     validateRefreshToken,
+    validateResendVerification,
 } = require('./auth.validation');
 
 // Login User Controller
 const loginUser = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const { email, password } = validateLogin.parse(req.body);
         const loginResult = await authService.loginUser(email, password);
         return res.status(200).json({
             success: true,
@@ -25,7 +26,7 @@ const loginUser = async (req, res, next) => {
 // Forgot Password Controller
 const forgotPassword = async (req, res, next) => {
     try {
-        const { email } = req.body;
+        const { email } = validateForgotPassword.parse(req.body);
         const resetToken = await authService.forgotPassword(email);
         return res.status(200).json({
             success: true,
@@ -40,7 +41,7 @@ const forgotPassword = async (req, res, next) => {
 // Reset Password Controller
 const resetPassword = async (req, res, next) => {
     try {
-        const { token, newPassword } = req.body;
+        const { token, newPassword } = validateResetPassword.parse(req.body);
         await authService.resetPassword(token, newPassword);
         return res.status(200).json({
             success: true,
@@ -54,12 +55,12 @@ const resetPassword = async (req, res, next) => {
 // Refresh Token Controller
 const refreshToken = async (req, res, next) => {
     try {
-        const { refreshToken } = req.body;
-        const newAccessToken = await authService.refreshToken(refreshToken);
+        const { refreshToken } = validateRefreshToken.parse(req.body);
+        const newAccessToken = await authService.refreshAccessToken(refreshToken);
         return res.status(200).json({
             success: true,
             message: "Refresh token successful",
-            data: { newAccessToken },
+            data: { accessToken: newAccessToken },
         });
     } catch (error) {
         next(error);
@@ -82,7 +83,7 @@ const logoutUser = async (req, res, next) => {
 // Verify Email Controller
 const verifyEmail = async (req, res, next) => {
     try {
-        const { token } = req.body;
+        const { token } = validateVerifyEmail.parse(req.body);
         await authService.verifyEmail(token);
         return res.status(200).json({
             success: true,
@@ -96,11 +97,12 @@ const verifyEmail = async (req, res, next) => {
 // Resend Verification Email Controller
 const resendVerificationEmail = async (req, res, next) => {
     try {
-        const { email } = req.body;
-        await authService.resendVerificationEmail(email);
+        const { email } = validateResendVerification.parse(req.body);
+        const verificationToken = await authService.resendVerificationEmail(email);
         return res.status(200).json({
             success: true,
             message: "Verification email resent",
+            data: { verificationToken },
         });
     } catch (error) {
         next(error);

@@ -18,6 +18,10 @@ const validateVerifyEmail = z.object({
     token: z.string().trim().min(1, "Token is required"),
 });
 
+const validateResendVerification = z.object({
+    email: z.string().trim().toLowerCase().email("Invalid email address"),
+});
+
 const validateRefreshToken = z.object({
     refreshToken: z.string().trim().min(1, "Refresh token is required"),
 });
@@ -27,5 +31,6 @@ module.exports = {
     validateForgotPassword,
     validateResetPassword,
     validateVerifyEmail,
+    validateResendVerification,
     validateRefreshToken,
 }

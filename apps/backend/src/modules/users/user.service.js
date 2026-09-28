@@ -2,6 +2,17 @@ const User = require("./user.model");
 const {hashPassword, comparePassword} = require("../../utils/password.utils");
 const { createError } = require("../../constants/error.constants");
 
+// Strip sensitive fields before a user document is sent in a response
+const sanitizeUser = (user) => {
+  user.password = undefined;
+  user.refreshToken = undefined;
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+  user.verificationToken = undefined;
+  user.verificationExpires = undefined;
+  return user;
+};
+
 // Create User
 const createUser = async (validatedData) => {
   const { name, email, password, avatar } = validatedData;
@@ -19,14 +30,15 @@ const createUser = async (validatedData) => {
     password: hashedPassword,
     avatar,
   });
-  // Never return password
-  user.password = undefined;
-  return user;
+  // Never return sensitive fields
+  return sanitizeUser(user);
 };
 
 // Get User by ID
 const getUserById = async (userId) => {
-  const user = await User.findById(userId).select("-password");
+  const user = await User.findById(userId).select(
+    "-password -refreshToken -passwordResetToken -passwordResetExpires -verificationToken -verificationExpires",
+  );
 
   if (!user) {
     const error = new Error("User not found");
@@ -64,7 +76,7 @@ const updateUser = async (userId, validatedData) => {
 
   await user.save();
 
-  return user;
+  return sanitizeUser(user);
 };
 
 // Change User Password
@@ -126,6 +138,7 @@ const updateLastLogin = async (userId) => {
 };
 
 module.exports = {
+  sanitizeUser,
   createUser,
   getUserById,
   getUserByEmail,

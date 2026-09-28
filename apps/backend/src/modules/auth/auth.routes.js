@@ -6,22 +6,23 @@ const authController = require('./auth.controller');
 // Login User Route
 router.post('/login', authController.loginUser);
 
-// Forgot Password Route
-router.post('/forgot-password', authMiddleware, authController.forgotPassword);
+// Forgot Password Route (public - a logged-out user needs this)
+router.post('/forgot-password', authController.forgotPassword);
 
-// Reset Password Route
-router.post('/reset-password', authMiddleware, authController.resetPassword);
+// Reset Password Route (public - a logged-out user needs this)
+router.post('/reset-password', authController.resetPassword);
 
-// Refresh Token Route
-router.post('/refresh-token', authMiddleware, authController.refreshToken);
+// Refresh Token Route (public - used precisely when the access token
+// has already expired, so it cannot require authMiddleware)
+router.post('/refresh-token', authController.refreshToken);
 
-// Logout User Route
+// Logout User Route (requires a valid access token)
 router.post('/logout', authMiddleware, authController.logoutUser);
 
-// Verify Email Route
-router.post('/verify-email', authMiddleware, authController.verifyEmail);
+// Verify Email Route (public - a not-yet-verified user needs this)
+router.post('/verify-email', authController.verifyEmail);
 
-// Resend Verification Email Route
-router.post('/resend-verification-email', authMiddleware, authController.resendVerificationEmail);
+// Resend Verification Email Route (public - same reason as above)
+router.post('/resend-verification-email', authController.resendVerificationEmail);
 
 module.exports = router;

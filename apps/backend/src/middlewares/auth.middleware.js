@@ -66,7 +66,9 @@ const authenticate = async (req, res, next) => {
     }
 
     // Fetch current user from database
-    const user = await User.findById(decoded.userId).select("-password");
+    const user = await User.findById(decoded.userId).select(
+      "-password -refreshToken -passwordResetToken -passwordResetExpires -verificationToken -verificationExpires",
+    );
 
     if (!user) {
       return res.status(401).json({

@@ -10,6 +10,7 @@ const getJobResults = async (req, res, next) => {
 
     const results = await resultService.getResultsByJob(
       jobId,
+      req.user.id,
       query.page,
       query.pageSize,
       query.status,
@@ -34,6 +35,7 @@ const getFailedResults = async (req, res, next) => {
 
     const results = await resultService.getFailedResults(
       jobId,
+      req.user.id,
       query.page,
       query.pageSize,
     );
@@ -53,7 +55,7 @@ const getResultStats = async (req, res, next) => {
   try {
     const { jobId } = resultValidation.resultJobParamsSchema.parse(req.params);
 
-    const stats = await resultService.getResultStats(jobId);
+    const stats = await resultService.getResultStats(jobId, req.user.id);
 
     return res.status(200).json({
       success: true,
@@ -66,34 +68,17 @@ const getResultStats = async (req, res, next) => {
 };
 
 // Get a single result
+// NOTE: results are not publicly mutable - see result.service.js for why
+// updateResult is kept internal-only and is not wired up to a route here.
 const getResultById = async (req, res, next) => {
   try {
     const { resultId } = resultValidation.resultIdSchema.parse(req.params);
 
-    const result = await resultService.getResultById(resultId);
+    const result = await resultService.getResultById(resultId, req.user.id);
 
     return res.status(200).json({
       success: true,
       message: "Result retrieved successfully",
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Update result
-const updateResult = async (req, res, next) => {
-  try {
-    const { resultId } = resultValidation.resultIdSchema.parse(req.params);
-
-    const data = resultValidation.updateResultSchema.parse(req.body);
-
-    const result = await resultService.updateResult(resultId, data);
-
-    return res.status(200).json({
-      success: true,
-      message: "Result updated successfully",
       data: result,
     });
   } catch (error) {
@@ -106,5 +91,4 @@ module.exports = {
   getFailedResults,
   getResultStats,
   getResultById,
-  updateResult,
 };

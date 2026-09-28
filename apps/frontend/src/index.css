@@ -1,0 +1,151 @@
+@import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+/*
+  Design tokens
+  -------------
+  BulkFlow reads as an operator's console for a data pipeline, not a
+  marketing site: near-black surfaces, a single cyan signal color for
+  anything "live" or actionable, and desaturated status colors so a
+  screen full of jobs stays scannable instead of noisy.
+*/
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-base: #0a0e14;
+  --color-base-raised: #0d1219;
+  --color-surface: #10141c;
+  --color-surface-hover: #161b25;
+  --color-surface-active: #1a212e;
+
+  --color-border: #1e2530;
+  --color-border-strong: #2a3441;
+
+  --color-ink: #e7eaf0;
+  --color-ink-muted: #8b96a5;
+  --color-ink-faint: #5b6472;
+
+  --color-accent: #22d3ee;
+  --color-accent-strong: #06b6d4;
+  --color-accent-soft: #0d2b32;
+
+  --color-status-processing: #38bdf8;
+  --color-status-processing-soft: #0d2536;
+
+  --color-status-queued: #94a3b8;
+  --color-status-queued-soft: #191f28;
+
+  --color-status-completed: #34d399;
+  --color-status-completed-soft: #0c2820;
+
+  --color-status-warning: #fbbf24;
+  --color-status-warning-soft: #2a2210;
+
+  --color-status-failed: #f87171;
+  --color-status-failed-soft: #2c1518;
+
+  --color-status-cancelled: #64748b;
+  --color-status-cancelled-soft: #161b25;
+
+  --shadow-panel: 0 8px 24px -8px rgb(0 0 0 / 0.5);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: #04141a;
+  }
+
+  /* Thin, dark scrollbars everywhere - a visible default scrollbar
+     breaks the console aesthetic more than almost anything else. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-strong);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-faint);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}

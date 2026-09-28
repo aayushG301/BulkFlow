@@ -66,7 +66,7 @@ const getUserUploads = async (userId, page, limit, status) => {
     throw createError(401, "User authentication is required");
   }
 
-  const pagination = getPagination(page, limit);
+  const pagination = getPagination({ page, limit });
   const filter = { userId };
 
   if (status) filter.status = status;
@@ -81,7 +81,11 @@ const getUserUploads = async (userId, page, limit, status) => {
 
   return {
     uploads,
-    pagination: buildPaginationMeta(pagination.page, pagination.limit, total),
+    pagination: buildPaginationMeta({
+      page: pagination.page,
+      limit: pagination.limit,
+      total,
+    }),
   };
 };
 

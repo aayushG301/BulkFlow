@@ -47,6 +47,33 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // Hashed refresh token currently issued to this user (cleared on
+    // logout so a stolen/expired refresh token can no longer be used)
+    refreshToken: {
+      type: String,
+      default: null,
+    },
+
+    passwordResetToken: {
+      type: String,
+      default: null,
+    },
+
+    passwordResetExpires: {
+      type: Date,
+      default: null,
+    },
+
+    verificationToken: {
+      type: String,
+      default: null,
+    },
+
+    verificationExpires: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

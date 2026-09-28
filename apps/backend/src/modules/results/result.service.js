@@ -1,4 +1,5 @@
 const Result = require("./result.model");
+const Job = require("../jobs/job.model");
 
 const { createError } = require("../../constants/error.constants");
 
@@ -6,6 +7,24 @@ const {
   getPagination,
   buildPaginationMeta,
 } = require("../../utils/pagination");
+
+// ----------------------------------------
+// Verify Job Ownership
+// ----------------------------------------
+// Results are only ever reached through their parent job, so every
+// read below must confirm the requesting user actually owns that job
+// before any Result documents are returned.
+const verifyJobOwnership = async (jobId, userId) => {
+  if (!userId) {
+    throw createError(401, "User authentication is required");
+  }
+
+  const job = await Job.findOne({ _id: jobId, userId }).select("_id");
+
+  if (!job) {
+    throw createError(404, "Job not found");
+  }
+};
 
 // Create many results
 const createManyResults = async (results) => {
@@ -17,16 +36,18 @@ const createManyResults = async (results) => {
 };
 
 // Get results for a job
-const getResultsByJob = async (jobId, page, pageSize, status) => {
+const getResultsByJob = async (jobId, userId, page, pageSize, status) => {
   if (!jobId) {
     throw createError(400, "Job ID is required");
   }
+
+  await verifyJobOwnership(jobId, userId);
 
   const {
     page: currentPage,
     limit: currentLimit,
     skip,
-  } = getPagination(page, pageSize);
+  } = getPagination({ page, limit: pageSize });
 
   const filter = { jobId };
 
@@ -42,24 +63,30 @@ const getResultsByJob = async (jobId, page, pageSize, status) => {
 
   return {
     results,
-    pagination: buildPaginationMeta(currentPage, currentLimit, total),
+    pagination: buildPaginationMeta({
+      page: currentPage,
+      limit: currentLimit,
+      total,
+    }),
   };
 };
 
 // Get failed results for a job
-const getFailedResults = async (jobId, page, pageSize) => {
+const getFailedResults = async (jobId, userId, page, pageSize) => {
   if (!jobId) {
     throw createError(400, "Job ID is required");
   }
 
-  return getResultsByJob(jobId, page, pageSize, "failed");
+  return getResultsByJob(jobId, userId, page, pageSize, "failed");
 };
 
 // Get result statistics for a job
-const getResultStats = async (jobId) => {
+const getResultStats = async (jobId, userId) => {
   if (!jobId) {
     throw createError(400, "Job ID is required");
   }
+
+  await verifyJobOwnership(jobId, userId);
 
   const stats = await Result.aggregate([
     {
@@ -92,29 +119,30 @@ const getResultStats = async (jobId) => {
 };
 
 // Get single result
-const getResultById = async (resultId, jobId) => {
+const getResultById = async (resultId, userId) => {
   if (!resultId) {
     throw createError(400, "Result ID is required");
   }
 
-  const filter = {
-    _id: resultId,
-  };
-
-  if (jobId) {
-    filter.jobId = jobId;
-  }
-
-  const result = await Result.findOne(filter);
+  const result = await Result.findById(resultId);
 
   if (!result) {
     throw createError(404, "Result not found");
   }
 
+  await verifyJobOwnership(result.jobId, userId);
+
   return result;
 };
 
-// Update result
+// ----------------------------------------
+// Update Result (internal only)
+// ----------------------------------------
+// Results are mutated exclusively by the processing worker as it works
+// through a job's rows. This helper is kept for that internal use only
+// and is intentionally NOT exposed through the public results API -
+// letting arbitrary users edit a result directly would let them
+// fabricate processed/enrichment data or hide failures.
 const updateResult = async (resultId, data) => {
   if (!resultId) {
     throw createError(400, "Result ID is required");

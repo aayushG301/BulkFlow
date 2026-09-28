@@ -1,30 +1,19 @@
-const fs = require("fs");
+const exportService = require("./export.service");
 
-const {
-  createExport,
-  getExportById,
-  getExportsByJob,
-} = require("./export.service");
-
-// ----------------------------------------
-// Create Export
-// ----------------------------------------
-
-const createExportController = async (req, res, next) => {
+const createExport = async (req, res, next) => {
   try {
-    const userId = req.user._id;
     const { jobId } = req.params;
     const { format = "csv" } = req.body;
 
-    const exportRecord = await createExport({
+    const exportRecord = await exportService.createExport({
       jobId,
-      userId,
+      userId: req.user.id,
       format,
     });
 
-    res.status(202).json({
+    return res.status(202).json({
       success: true,
-      message: "Export job queued successfully",
+      message: "Export queued successfully",
       data: exportRecord,
     });
   } catch (error) {
@@ -32,22 +21,16 @@ const createExportController = async (req, res, next) => {
   }
 };
 
-// ----------------------------------------
-// Get Export
-// ----------------------------------------
-
-const getExportController = async (req, res, next) => {
+const getExport = async (req, res, next) => {
   try {
-    const userId = req.user._id;
-    const { exportId } = req.params;
-
-    const exportRecord = await getExportById({
-      exportId,
-      userId,
+    const exportRecord = await exportService.getExportById({
+      exportId: req.params.exportId,
+      userId: req.user.id,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      message: "Export retrieved successfully",
       data: exportRecord,
     });
   } catch (error) {
@@ -55,22 +38,16 @@ const getExportController = async (req, res, next) => {
   }
 };
 
-// ----------------------------------------
-// Get Job Exports
-// ----------------------------------------
-
-const getJobExportsController = async (req, res, next) => {
+const getJobExports = async (req, res, next) => {
   try {
-    const userId = req.user._id;
-    const { jobId } = req.params;
-
-    const exports = await getExportsByJob({
-      jobId,
-      userId,
+    const exports = await exportService.getExportsByJob({
+      jobId: req.params.jobId,
+      userId: req.user.id,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      message: "Exports retrieved successfully",
       data: exports,
     });
   } catch (error) {
@@ -81,47 +58,29 @@ const getJobExportsController = async (req, res, next) => {
 // ----------------------------------------
 // Download Export
 // ----------------------------------------
-
-const downloadExportController = async (req, res, next) => {
+// Authenticated, ownership-checked, streamed file download. The file
+// path served here always comes from exportService (never straight
+// from the request), so it cannot be used to read arbitrary files.
+const downloadExport = async (req, res, next) => {
   try {
-    const userId = req.user._id;
-    const { exportId } = req.params;
-
-    const exportRecord = await getExportById({
-      exportId,
-      userId,
+    const file = await exportService.getExportFileForDownload({
+      exportId: req.params.exportId,
+      userId: req.user.id,
     });
 
-    if (exportRecord.status !== "completed") {
-      return res.status(400).json({
-        success: false,
-        message: "Export is not ready for download",
-      });
-    }
-
-    if (!exportRecord.filePath) {
-      return res.status(404).json({
-        success: false,
-        message: "Export file not found",
-      });
-    }
-
-    if (!fs.existsSync(exportRecord.filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: "Export file no longer exists",
-      });
-    }
-
-    return res.download(exportRecord.filePath, exportRecord.fileName);
+    return res.download(file.filePath, file.fileName, (error) => {
+      if (error && !res.headersSent) {
+        next(error);
+      }
+    });
   } catch (error) {
     next(error);
   }
 };
 
 module.exports = {
-  createExportController,
-  getExportController,
-  getJobExportsController,
-  downloadExportController,
+  createExport,
+  getExport,
+  getJobExports,
+  downloadExport,
 };

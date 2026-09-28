@@ -1,38 +1,18 @@
 const express = require("express");
 
-const {
-  createExportController,
-  getExportController,
-  getJobExportsController,
-  downloadExportController,
-} = require("./export.controller");
-
 const authMiddleware = require("../../middlewares/auth.middleware");
+const controller = require("./export.controller");
 
 const router = express.Router();
 
-// ----------------------------------------
-// Create Export
-// ----------------------------------------
+router.use(authMiddleware);
 
-router.post("/jobs/:jobId", authMiddleware, createExportController);
+router.post("/jobs/:jobId", controller.createExport);
 
-// ----------------------------------------
-// Get All Exports For Job
-// ----------------------------------------
+router.get("/jobs/:jobId", controller.getJobExports);
 
-router.get("/jobs/:jobId", authMiddleware, getJobExportsController);
+router.get("/:exportId/download", controller.downloadExport);
 
-// ----------------------------------------
-// Download Export
-// ----------------------------------------
-
-router.get("/:exportId/download", authMiddleware, downloadExportController);
-
-// ----------------------------------------
-// Get Export
-// ----------------------------------------
-
-router.get("/:exportId", authMiddleware, getExportController);
+router.get("/:exportId", controller.getExport);
 
 module.exports = router;
