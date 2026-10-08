@@ -49,3 +49,9 @@ Imports use the `@/` alias for `src/`.
 
 The backend has no endpoint for these, so they are not faked: editing / reprocessing a single row,
 per-job source filename in list views, cluster/latency telemetry, enrichment analytics.
+
+## Changelog
+
+See `CHANGELOG.md` for real bugs found and fixed during testing (live results
+not updating, mobile nav drawer not closing, and two separate Socket.IO
+reconnection bugs where the UI would silently stop receiving live updates).

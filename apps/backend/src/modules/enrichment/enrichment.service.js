@@ -1,49 +1,67 @@
+const env = require("../../config/env");
+
+const { enrichWithMock, enrichWithGemini } = require("./enrichment.provider");
+
 const {
   normalizeEnrichmentInput,
   buildEnrichmentResult,
 } = require("./enrichment.utils");
 
-const { enrich } = require("./enrichment.provider");
-
-const enrichRow = async (data) => {
+// ----------------------------------------
+// Enrich A Single Row
+// ----------------------------------------
+// `provider` is whatever was chosen at upload time ("mock" | "gemini").
+// Falls back to the mock provider - with a clear server-side warning -
+// when Gemini is requested but no API key is configured, so a missing
+// key degrades gracefully instead of failing every row in the job.
+const enrichRow = async (data, provider = "mock") => {
   const normalizedData = normalizeEnrichmentInput(data);
 
-  const enrichmentResult = await enrich(normalizedData);
+  let resolvedProvider = provider;
+
+  if (provider === "gemini" && !env.GEMINI_API_KEY) {
+    console.warn(
+      "⚠️ Gemini enrichment requested but GEMINI_API_KEY is not set - falling back to the mock provider.",
+    );
+
+    resolvedProvider = "mock";
+  }
+
+  const enrichmentResult =
+    resolvedProvider === "gemini"
+      ? await enrichWithGemini(normalizedData, {
+          apiKey: env.GEMINI_API_KEY,
+          model: env.GEMINI_MODEL,
+        })
+      : await enrichWithMock(normalizedData);
 
   return buildEnrichmentResult(enrichmentResult);
 };
 
-const enrichRows = async (rows) => {
-  if (!Array.isArray(rows)) {
-    const error = new Error("Rows must be an array");
+// ----------------------------------------
+// Enrich Many Rows
+// ----------------------------------------
+// Used by tests and any future batch caller - reports per-row
+// success/failure rather than throwing, so one bad row never loses
+// the results of the rest of the batch.
+const enrichRows = async (rows, provider = "mock") => {
+  return Promise.all(
+    rows.map(async (row) => {
+      try {
+        const result = await enrichRow(row, provider);
 
-    error.code = "ROWS_MUST_BE_ARRAY";
-
-    throw error;
-  }
-
-  const results = [];
-
-  for (const row of rows) {
-    try {
-      const result = await enrichRow(row);
-
-      results.push({
-        success: true,
-        ...result,
-      });
-    } catch (error) {
-      results.push({
-        success: false,
-        error: {
-          message: error.message,
-          code: error.code || "ENRICHMENT_ERROR",
-        },
-      });
-    }
-  }
-
-  return results;
+        return { success: true, result };
+      } catch (error) {
+        return {
+          success: false,
+          error: {
+            message: error.message,
+            code: error.code || "ENRICHMENT_FAILED",
+          },
+        };
+      }
+    }),
+  );
 };
 
 module.exports = {

@@ -71,4 +71,21 @@ maybeDescribe("Dashboard API", () => {
     expect(response.body.data.processing.remainingRows).toBe(0);
     expect(response.body.data.recentJobs).toHaveLength(2);
   });
+
+  test("reports whether Gemini is actually configured, not just selectable", async () => {
+    const { token } = await createTestUser();
+
+    const response = await request(app)
+      .get("/api/v1/dashboard")
+      .set(authHeader(token));
+
+    expect(response.status).toBe(200);
+    // .env.test intentionally leaves GEMINI_API_KEY unset, so this
+    // should accurately report "not configured" rather than assuming
+    // the upload-time provider choice means it's live.
+    expect(response.body.data.enrichment).toEqual({
+      geminiConfigured: false,
+      geminiModel: expect.any(String),
+    });
+  });
 });

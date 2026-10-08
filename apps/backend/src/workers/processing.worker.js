@@ -72,7 +72,21 @@ const processingWorker = new Worker(
           result.processedData = processed.processedData;
 
           if (currentJob.processingOptions?.enrichmentEnabled) {
-            result.enrichmentData = await enrichRow(result.processedData);
+            // Enrichment is a best-effort addition, not a correctness
+            // requirement - an enrichment failure (rate limit, network
+            // blip, bad API key) must never fail an otherwise-valid row.
+            try {
+              result.enrichmentData = await enrichRow(
+                result.processedData,
+                currentJob.processingOptions?.enrichmentProvider,
+              );
+            } catch (enrichmentError) {
+              result.enrichmentData = null;
+              console.warn(
+                `⚠️ Enrichment failed for result ${result._id} (row ${result.rowNum}):`,
+                enrichmentError.message,
+              );
+            }
           }
 
           result.status = "completed";

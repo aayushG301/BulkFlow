@@ -39,6 +39,18 @@ const envSchema = z.object({
     REDIS_URL: z
     .string()
     .min(1, "REDIS_URL is required"),
+
+  // Optional on purpose: enrichment falls back to the mock provider
+  // when this isn't set, rather than failing to boot.
+  GEMINI_API_KEY: z
+    .string()
+    .trim()
+    .optional(),
+
+  GEMINI_MODEL: z
+    .string()
+    .trim()
+    .default("gemini-1.5-flash"),
    });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -7,6 +7,7 @@ const {
   buildPaginationMeta,
 } = require("../../utils/pagination");
 const Job = require("../jobs/job.model");
+const { addIngestionJob } = require("../../queues/ingestion.queue");
 
 // Helpers
 const getUploadForUser = async (uploadId, userId) => {
@@ -254,6 +255,32 @@ const retryUpload = async (uploadId, userId) => {
   upload.error = null;
 
   await upload.save();
+
+  // An upload-level retry means "start over from ingestion". Without
+  // this, the upload is reset to "queued" in the database but nothing
+  // ever actually reprocesses it - it would sit there forever.
+  const job = await Job.findOne({ uploadId: upload._id, userId });
+
+  if (job) {
+    job.status = "queued";
+    job.progress = 0;
+    job.processStats = {
+      totalRows: 0,
+      processedRows: 0,
+      successfulRows: 0,
+      failedRows: 0,
+    };
+    job.error = { message: null, code: null };
+    job.startedAt = null;
+    job.completedAt = null;
+
+    await job.save();
+
+    await addIngestionJob({
+      uploadId: upload._id.toString(),
+      jobId: job._id.toString(),
+    });
+  }
 
   return upload;
 };

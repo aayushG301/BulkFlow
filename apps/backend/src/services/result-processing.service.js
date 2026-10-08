@@ -2,7 +2,7 @@ const { processRow } = require("../modules/processing/processing.service");
 
 const { enrichRow } = require("../modules/enrichment/enrichment.service");
 
-const processResult = async (result, enrichmentEnabled = false) => {
+const processResult = async (result, enrichmentEnabled = false, enrichmentProvider = "mock") => {
   if (!result?.originalData) {
     const error = new Error("Result contains no original data");
 
@@ -18,7 +18,7 @@ const processResult = async (result, enrichmentEnabled = false) => {
   };
 
   if (enrichmentEnabled) {
-    data.enrichmentData = await enrichRow(data.processedData);
+    data.enrichmentData = await enrichRow(data.processedData, enrichmentProvider);
   }
 
   return data;

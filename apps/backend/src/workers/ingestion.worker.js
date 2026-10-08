@@ -61,6 +61,16 @@ const ingestionWorker = new Worker(
 
       job.progress = 0;
 
+      // The enrichment choice made at upload time lives on the Upload
+      // document (upload.configuration), but the processing worker only
+      // ever reads job.processingOptions - without this, enrichment
+      // silently never runs no matter what was selected during upload.
+      job.processingOptions = {
+        ...job.processingOptions,
+        enrichmentEnabled: Boolean(upload.configuration?.enrichmentEnabled),
+        enrichmentProvider: upload.configuration?.enrichmentProvider,
+      };
+
       await job.save();
 
       await updateUploadProgress(uploadId, {

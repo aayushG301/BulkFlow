@@ -8,8 +8,8 @@
     "dev:worker": "nodemon src/worker.js",
     "start": "node src/server.js",
     "start:worker": "node src/worker.js",
-    "test": "jest --runInBand --forceExit",
-    "test:watch": "jest --runInBand --watch"
+    "test": "jest",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -28,13 +28,13 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.3",
     "multer": "^2.3.0",
+    "nodemon": "^3.1.14",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "eslint": "^10.9.0",
     "jest": "^30.5.2",
-    "nodemon": "^3.1.14",
     "prettier": "^3.9.6",
     "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2"

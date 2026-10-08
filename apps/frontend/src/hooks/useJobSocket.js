@@ -17,21 +17,8 @@ export function useJobSocket(jobId, onUpdate) {
     const socket = connectSocket()
     let cancelled = false
 
-    const handleConnect = () => setIsConnected(true)
-    const handleDisconnect = () => {
-      setIsConnected(false)
-      setIsJoined(false)
-    }
-
-    socket.on('connect', handleConnect)
-    socket.on('disconnect', handleDisconnect)
-    setIsConnected(socket.connected)
-
     const join = async () => {
       try {
-        if (!socket.connected) {
-          await new Promise((resolve) => socket.once('connect', resolve))
-        }
         await joinJobRoom(socket, jobId)
         if (!cancelled) setIsJoined(true)
       } catch {
@@ -39,7 +26,40 @@ export function useJobSocket(jobId, onUpdate) {
       }
     }
 
-    join()
+    // Socket.IO rooms live on the server-side connection, not the
+    // client object - when the underlying transport reconnects after a
+    // network blip, that's a brand-new connection on the server and
+    // the old room membership is gone. Re-joining on every 'connect'
+    // (not just the first one) is what keeps "live" actually live
+    // instead of silently going stale after any hiccup.
+    const handleConnect = () => {
+      setIsConnected(true)
+      join()
+    }
+
+    const handleDisconnect = (reason) => {
+      setIsConnected(false)
+      setIsJoined(false)
+
+      // socket.io-client auto-reconnects for transport-level drops
+      // (wifi blip, ping timeout) but deliberately does NOT reconnect
+      // when the server initiated the disconnect (e.g. a backend
+      // deploy/restart) - without this, every client would silently
+      // stop receiving live updates until the page is refreshed.
+      if (reason === 'io server disconnect' && !cancelled) {
+        socket.connect()
+      }
+    }
+
+    socket.on('connect', handleConnect)
+    socket.on('disconnect', handleDisconnect)
+    setIsConnected(socket.connected)
+
+    // If we're already connected, join now - otherwise handleConnect
+    // will run (and join) as soon as the in-flight connect finishes.
+    if (socket.connected) {
+      join()
+    }
 
     const unsubscribe = subscribeToJobEvents(socket, (_event, payload) => {
       if (!payload || payload.jobId !== jobId) return

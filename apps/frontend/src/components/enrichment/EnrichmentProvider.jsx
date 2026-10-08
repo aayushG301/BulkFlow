@@ -9,7 +9,7 @@ export function EnrichmentProvider({ name, description, status = 'available' }) 
         <p className="text-sm font-medium text-ink">{name}</p>
         <p className="mt-0.5 text-xs text-ink-muted">{description}</p>
       </div>
-      <Badge tone={isAvailable ? 'completed' : 'neutral'}>
+      <Badge tone={isAvailable ? 'completed' : 'warning'}>
         {isAvailable ? 'Available' : 'Not connected'}
       </Badge>
     </div>

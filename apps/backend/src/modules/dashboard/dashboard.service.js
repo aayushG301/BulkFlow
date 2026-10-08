@@ -1,5 +1,6 @@
 const Job = require("../jobs/job.model");
 const Upload = require("../uploads/upload.model");
+const env = require("../../config/env");
 
 const getDashboard = async (userId) => {
   if (!userId) throw new Error("User ID is required");
@@ -76,6 +77,13 @@ const getDashboard = async (userId) => {
     processing: {
       ...rows,
       remainingRows: Math.max(0, rows.totalRows - rows.processedRows),
+    },
+    // Lets the frontend show real status instead of guessing - whether
+    // an upload's enrichment choice actually reaches a live provider
+    // depends entirely on this.
+    enrichment: {
+      geminiConfigured: Boolean(env.GEMINI_API_KEY),
+      geminiModel: env.GEMINI_MODEL,
     },
     recentJobs,
   };

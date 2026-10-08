@@ -35,7 +35,7 @@ export function AIEnrichment() {
       {stats.length > 0 && <EnrichmentStats stats={stats} />}
 
       <EnrichmentOverview />
-      <EnrichmentSettings />
+      <EnrichmentSettings enrichmentStatus={data?.enrichment} />
     </div>
   )
 }

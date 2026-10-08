@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 
 import { useResults } from '@/hooks/useResults'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useToast } from '@/context/ToastContext'
 import { useExports } from '@/hooks/useExports'
+import { useJobSocket } from '@/hooks/useJobSocket'
 import { jobApi } from '@/services/job.api'
 import { ResultsTable } from '@/components/results/ResultsTable'
 import { ResultFilters } from '@/components/results/ResultFilters'
@@ -15,6 +16,11 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Download } from 'lucide-react'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { formatNumber } from '@/utils/formatNumber'
+
+// Statuses where rows can still change - while the active job is in
+// one of these, the results table refreshes itself automatically.
+const ACTIVE_JOB_STATUSES = ['queued', 'processing']
+const POLL_INTERVAL_MS = 4000
 
 export function Results() {
   const { setPageHeader } = useOutletContext()
@@ -63,6 +69,32 @@ export function Results() {
   const exportsState = useExports(jobId)
 
   const activeJob = useMemo(() => jobs.find((j) => j._id === jobId), [jobs, jobId])
+
+  // The results list itself has no dedicated socket event per row, so
+  // "live" here means: while this job is still queued/processing, join
+  // its room for an immediate nudge on every status/progress tick, and
+  // poll as a fallback in case a tick is missed or the socket drops.
+  const [liveJobStatus, setLiveJobStatus] = useState(activeJob?.status)
+  const pollTimer = useRef(null)
+
+  useEffect(() => {
+    setLiveJobStatus(activeJob?.status)
+  }, [activeJob?.status])
+
+  const { isLive } = useJobSocket(jobId, (patch) => {
+    if (patch.status) setLiveJobStatus(patch.status)
+    refetch()
+  })
+
+  const isJobActive = ACTIVE_JOB_STATUSES.includes(liveJobStatus)
+
+  useEffect(() => {
+    if (!jobId || !isJobActive) return undefined
+
+    pollTimer.current = setInterval(refetch, POLL_INTERVAL_MS)
+    return () => clearInterval(pollTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, isJobActive])
 
   useEffect(() => {
     setPageHeader({
@@ -114,8 +146,19 @@ export function Results() {
     <div className="mx-auto flex max-w-6xl flex-col gap-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-ink">Batch Processing Results</h1>
-          <p className="mt-1 text-sm text-ink-muted">Row-level inspection for a single job.</p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-ink">Batch Processing Results</h1>
+            {isJobActive && (
+              <span className="flex items-center gap-1.5 rounded-full bg-status-processing-soft px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-status-processing">
+                <span className="size-1.5 animate-pulse-dot rounded-full bg-status-processing" />
+                {isLive ? 'Live' : 'Refreshing'}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-ink-muted">
+            Row-level inspection for a single job.
+            {isJobActive && ' This table updates automatically while the job runs.'}
+          </p>
         </div>
         <Button variant="primary" size="sm" icon={Download} onClick={handleExport} isLoading={exportsState.isExporting}>
           Export CSV

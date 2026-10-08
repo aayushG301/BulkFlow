@@ -7,14 +7,18 @@ const {
   connectTestDB,
   disconnectTestDB,
   clearTestDB,
+  closeQueueConnections,
 } = require("../helpers/db");
 
 const {
   app,
   createTestUser,
   createTestUpload,
+  createTestJob,
   authHeader,
 } = require("../helpers/factories");
+
+const Job = require("../../src/modules/jobs/job.model");
 
 const dbAvailable = process.env.DB_AVAILABLE === "true";
 const maybeDescribe = dbAvailable ? describe : describe.skip;
@@ -34,6 +38,7 @@ maybeDescribe("Uploads API", () => {
 
   afterAll(async () => {
     await disconnectTestDB();
+    await closeQueueConnections();
 
     if (fs.existsSync(sampleCSVPath)) {
       fs.unlinkSync(sampleCSVPath);
@@ -178,6 +183,29 @@ maybeDescribe("Uploads API", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.status).toBe("queued");
+    });
+
+    test("actually re-queues ingestion for the upload's job, not just the status label", async () => {
+      const { user, token } = await createTestUser();
+      const upload = await createTestUpload(user._id, { status: "failed" });
+      const job = await createTestJob(user._id, upload._id, { status: "failed" });
+
+      const response = await request(app)
+        .patch(`/api/v1/uploads/${upload._id}/retry`)
+        .set(authHeader(token));
+
+      expect(response.status).toBe(200);
+
+      const { ingestionQueue } = require("../../src/queues/ingestion.queue");
+      const waitingJobs = await ingestionQueue.getJobs(["waiting", "delayed"]);
+      const queuedForThisJob = waitingJobs.find(
+        (queueJob) => queueJob.data.jobId === job._id.toString(),
+      );
+
+      expect(queuedForThisJob).toBeDefined();
+
+      const refreshedJob = await Job.findById(job._id);
+      expect(refreshedJob.status).toBe("queued");
     });
 
     test("rejects retrying an upload that is not failed", async () => {
